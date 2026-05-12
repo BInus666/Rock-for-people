@@ -9,7 +9,8 @@ const stages = [
   "Karaoke Stage"
 ];
 
-const defaultFriends = ["Binus", "Zuzka", "Martin", "Kateřina", "Kropy", "Štěpánka"];
+const defaultFriends = ["Binus", "Zuzka", "Martin", "Kateřina", "Kropi", "Štěpánka"];
+const renamedFriends = { Kropy: "Kropi" };
 
 const brewerySites = {
   "Clock": "pivovarclock.cz",
@@ -691,10 +692,11 @@ function normalizeState(loaded) {
   loaded.foodReviews = loaded.foodReviews || {};
   loaded.customBeers = loaded.customBeers || {};
   const placeholders = new Set(["Bina", "Kamos 1", "Kamos 2"]);
-  const friends = (loaded.friends || []).filter((friend) => !placeholders.has(friend));
+  const friends = (loaded.friends || []).map(renameFriend).filter((friend) => !placeholders.has(friend));
   loaded.friends = [...new Set([...defaultFriends, ...friends])];
   loaded.votes = loaded.votes || {};
   loaded.comments = loaded.comments || {};
+  Object.values(loaded.votes).forEach(renameFriendKeys);
   Object.values(loaded.votes).forEach((votes) => {
     placeholders.forEach((friend) => delete votes[friend]);
   });
@@ -702,19 +704,39 @@ function normalizeState(loaded) {
     if (!Object.keys(loaded.votes[id]).length) delete loaded.votes[id];
   });
   Object.keys(loaded.comments).forEach((id) => {
+    loaded.comments[id].forEach((comment) => {
+      comment.friend = renameFriend(comment.friend);
+    });
     loaded.comments[id] = loaded.comments[id].filter((comment) => !placeholders.has(comment.friend));
     if (!loaded.comments[id].length) delete loaded.comments[id];
   });
   ["beer", "food"].forEach((type) => {
     Object.values(loaded.ratings[type] || {}).forEach((ratings) => {
+      renameFriendKeys(ratings);
       placeholders.forEach((friend) => delete ratings[friend]);
     });
   });
   Object.keys(loaded.foodReviews).forEach((id) => {
+    loaded.foodReviews[id].forEach((review) => {
+      review.friend = renameFriend(review.friend);
+    });
     loaded.foodReviews[id] = loaded.foodReviews[id].filter((review) => !placeholders.has(review.friend));
     if (!loaded.foodReviews[id].length) delete loaded.foodReviews[id];
   });
   return loaded;
+}
+
+function renameFriend(name) {
+  return renamedFriends[name] || name;
+}
+
+function renameFriendKeys(record) {
+  Object.entries(renamedFriends).forEach(([oldName, newName]) => {
+    if (Object.prototype.hasOwnProperty.call(record, oldName)) {
+      record[newName] = record[newName] || record[oldName];
+      delete record[oldName];
+    }
+  });
 }
 
 function saveState() {
@@ -756,6 +778,7 @@ async function loadCloudState() {
   state = normalizeState({ ...defaultState(), ...(data?.data || {}) });
   state.activeFriend = activeFriend && state.friends.includes(activeFriend) ? activeFriend : "";
   localStorage.setItem(storageKey, JSON.stringify(sharedState()));
+  if (JSON.stringify(data?.data || {}) !== JSON.stringify(sharedState())) queueCloudSave();
 }
 
 function subscribeCloudState() {
