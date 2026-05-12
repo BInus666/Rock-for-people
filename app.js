@@ -843,7 +843,7 @@ function eventSearchText(day, event) {
 }
 
 function eventSuggestionLabel(day, event) {
-  return `${event.name} - ${day.label} ${day.date}, ${event.start}, ${displayStage(event.stage)}`;
+  return event.name;
 }
 
 function findProgramMatches(query) {
