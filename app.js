@@ -1732,6 +1732,8 @@ function navigateToProgramSearch() {
   searchTargetId = target.id;
   activeEventId = null;
   els.stageFilter.value = "all";
+  els.searchInput.value = "";
+  renderEventSuggestions();
   closeEvent();
   render();
 }
