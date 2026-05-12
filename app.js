@@ -1709,7 +1709,7 @@ function renderView() {
   }
 }
 
-function navigateToProgramSearch() {
+function navigateToProgramSearch({ allowFirstMatch = false } = {}) {
   const query = els.searchInput.value.trim();
   renderEventSuggestions();
   if (!query) {
@@ -1720,10 +1720,8 @@ function navigateToProgramSearch() {
 
   const matches = findProgramMatches(query);
   const exact = matches.find(({ day, event }) => eventSuggestionLabel(day, event) === query);
-  const target = exact || (query.length >= 2 ? matches[0] : null);
+  const target = exact || (allowFirstMatch && query.length >= 2 ? matches[0] : null);
   if (!target) {
-    searchTargetId = null;
-    render();
     return;
   }
 
@@ -1736,6 +1734,20 @@ function navigateToProgramSearch() {
   renderEventSuggestions();
   closeEvent();
   render();
+}
+
+function navigateToSingleProgramSearch() {
+  const query = els.searchInput.value.trim();
+  renderEventSuggestions();
+  if (!query) {
+    searchTargetId = null;
+    render();
+    return;
+  }
+  const matches = findProgramMatches(query);
+  if (matches.length === 1) {
+    navigateToProgramSearch({ allowFirstMatch: true });
+  }
 }
 
 function renderBackground() {
@@ -1789,7 +1801,7 @@ els.stageFilter.addEventListener("change", render);
 els.searchInput.addEventListener("input", () => {
   clearTimeout(searchTimer);
   renderEventSuggestions();
-  searchTimer = setTimeout(navigateToProgramSearch, 180);
+  searchTimer = setTimeout(navigateToSingleProgramSearch, 180);
 });
 els.searchInput.addEventListener("change", navigateToProgramSearch);
 els.onlyMine.addEventListener("change", render);
