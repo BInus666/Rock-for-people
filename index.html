@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rock for People plán</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <div class="rfp-logo" aria-label="Rock for People">
+          <span>Rock</span>
+          <span>for</span>
+          <span>People</span>
+        </div>
+        <p class="eyebrow">Park 360, Hradec Králové</p>
+        <h1>Rock for People 2026</h1>
+      </div>
+      <div class="top-actions">
+        <label class="friend-picker">
+          <span>Kdo hlasuje</span>
+          <select id="activeFriend"></select>
+        </label>
+        <button id="addFriendBtn" class="ghost-button" type="button">+ člověk</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="side-panel">
+        <section class="panel-block">
+          <h2>Moduly</h2>
+          <div class="module-switcher">
+            <button class="module-button active" type="button" data-view="program">Program</button>
+            <button class="module-button" type="button" data-view="beer">Beer rating</button>
+            <button class="module-button" type="button" data-view="food">Food rating</button>
+          </div>
+        </section>
+
+        <section class="panel-block shared-panel">
+          <h2>Parta</h2>
+          <button id="addFriendPanelBtn" class="ghost-button full-button" type="button">+ člověk</button>
+          <div id="friendList" class="friend-list"></div>
+        </section>
+
+        <section class="panel-block program-only">
+          <h2>Filtry</h2>
+          <div class="filter-stack">
+            <label>
+              <span>Vyhledat kapelu</span>
+              <input id="searchInput" type="search" placeholder="třeba Gorillaz" />
+            </label>
+            <label>
+              <span>Scéna</span>
+              <select id="stageFilter">
+                <option value="all">Všechny scény</option>
+              </select>
+            </label>
+            <label class="checkbox-line">
+              <input id="onlyMine" type="checkbox" />
+              <span>Jen moje hodnocené</span>
+            </label>
+          </div>
+        </section>
+
+      </aside>
+
+      <section class="content">
+        <nav id="dayTabs" class="day-tabs program-only" aria-label="Dny festivalu"></nav>
+        <div id="mobileStageStrip" class="mobile-stage-strip program-only" aria-hidden="true">
+          <div id="mobileStageTrack" class="mobile-stage-track"></div>
+        </div>
+        <section id="schedule" class="schedule" aria-label="Časový harmonogram">
+          <div id="timeAxis" class="time-axis"></div>
+          <div id="stageGrid" class="stage-grid"></div>
+        </section>
+        <section id="ratingPanel" class="rating-panel" hidden></section>
+      </section>
+    </main>
+
+    <div id="eventDialog" class="event-dialog" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
