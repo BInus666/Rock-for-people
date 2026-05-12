@@ -619,6 +619,9 @@ let activeView = "program";
 let activeEventId = null;
 let searchTargetId = null;
 let searchTimer = null;
+let searchFrame = null;
+let programSearchIndex = null;
+let lastSuggestionSignature = "";
 let openBeerId = null;
 let openFoodId = null;
 let openDishId = null;
@@ -834,7 +837,17 @@ function getEventScore(id) {
 }
 
 function allProgramEvents() {
-  return days.flatMap((day) => day.events.map((event) => ({ day, event, id: eventId(day.id, event) })));
+  if (!programSearchIndex) {
+    programSearchIndex = days.flatMap((day) => day.events.map((event) => ({
+      day,
+      event,
+      id: eventId(day.id, event),
+      label: eventSuggestionLabel(day, event),
+      searchText: eventSearchText(day, event),
+      nameSearch: searchable(event.name)
+    })));
+  }
+  return programSearchIndex;
 }
 
 function eventSearchText(day, event) {
@@ -850,10 +863,10 @@ function findProgramMatches(query) {
   const needle = searchable(query.trim());
   if (!needle) return [];
   return allProgramEvents()
-    .filter(({ day, event }) => eventSearchText(day, event).includes(needle))
+    .filter(({ searchText }) => searchText.includes(needle))
     .sort((a, b) => {
-      const exactA = searchable(a.event.name) === needle ? 0 : 1;
-      const exactB = searchable(b.event.name) === needle ? 0 : 1;
+      const exactA = a.nameSearch === needle ? 0 : 1;
+      const exactB = b.nameSearch === needle ? 0 : 1;
       if (exactA !== exactB) return exactA - exactB;
       return days.indexOf(a.day) - days.indexOf(b.day) || minutes(a.event.start) - minutes(b.event.start);
     });
@@ -917,12 +930,17 @@ function renderEventSuggestions() {
   if (!els.eventSuggestions) return;
   const query = els.searchInput.value.trim();
   const matches = findProgramMatches(query).slice(0, 12);
+  const signature = matches.map(({ id }) => id).join("|");
+  if (signature === lastSuggestionSignature) return;
+  lastSuggestionSignature = signature;
   els.eventSuggestions.innerHTML = "";
+  const fragment = document.createDocumentFragment();
   matches.forEach(({ day, event }) => {
     const option = document.createElement("option");
     option.value = eventSuggestionLabel(day, event);
-    els.eventSuggestions.append(option);
+    fragment.append(option);
   });
+  els.eventSuggestions.append(fragment);
 }
 
 function renderTabs() {
@@ -1750,6 +1768,16 @@ function navigateToSingleProgramSearch() {
   }
 }
 
+function handleProgramSearchInput() {
+  clearTimeout(searchTimer);
+  if (searchFrame) cancelAnimationFrame(searchFrame);
+  searchFrame = requestAnimationFrame(() => {
+    renderEventSuggestions();
+    searchFrame = null;
+  });
+  searchTimer = setTimeout(navigateToSingleProgramSearch, 280);
+}
+
 function renderBackground() {
   renderFriends();
   renderView();
@@ -1798,11 +1826,7 @@ els.addFriendBtn.addEventListener("click", addFriend);
 els.addFriendPanelBtn.addEventListener("click", addFriend);
 
 els.stageFilter.addEventListener("change", render);
-els.searchInput.addEventListener("input", () => {
-  clearTimeout(searchTimer);
-  renderEventSuggestions();
-  searchTimer = setTimeout(navigateToSingleProgramSearch, 180);
-});
+els.searchInput.addEventListener("input", handleProgramSearchInput);
 els.searchInput.addEventListener("change", navigateToProgramSearch);
 els.onlyMine.addEventListener("change", render);
 els.schedule.addEventListener("scroll", updateMobileStageTrack, { passive: true });
