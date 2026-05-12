@@ -617,6 +617,8 @@ let state = defaultState();
 let activeDay = days[0].id;
 let activeView = "program";
 let activeEventId = null;
+let searchTargetId = null;
+let searchTimer = null;
 let openBeerId = null;
 let openFoodId = null;
 let openDishId = null;
@@ -628,6 +630,7 @@ const els = {
   friendList: document.querySelector("#friendList"),
   stageFilter: document.querySelector("#stageFilter"),
   searchInput: document.querySelector("#searchInput"),
+  eventSuggestions: document.querySelector("#eventSuggestions"),
   onlyMine: document.querySelector("#onlyMine"),
   moduleButtons: document.querySelectorAll("[data-view]"),
   programOnly: document.querySelectorAll(".program-only"),
@@ -664,7 +667,7 @@ function food(name, description) {
 function loadState() {
   const fallback = defaultState();
   const raw = localStorage.getItem(storageKey);
-  const activeFriend = localStorage.getItem(activeFriendKey) || "";
+  const activeFriend = renameFriend(localStorage.getItem(activeFriendKey) || "");
   if (!raw) return { ...fallback, activeFriend };
   try {
     const loaded = normalizeState({ ...fallback, ...JSON.parse(raw) });
@@ -774,7 +777,7 @@ async function loadCloudState() {
     console.warn("Supabase load failed:", error.message);
     return;
   }
-  const activeFriend = state.activeFriend;
+  const activeFriend = renameFriend(state.activeFriend);
   state = normalizeState({ ...defaultState(), ...(data?.data || {}) });
   state.activeFriend = activeFriend && state.friends.includes(activeFriend) ? activeFriend : "";
   localStorage.setItem(storageKey, JSON.stringify(sharedState()));
@@ -790,7 +793,7 @@ function subscribeCloudState() {
       (payload) => {
         if (!payload.new?.data) return;
         applyingRemote = true;
-        const activeFriend = state.activeFriend;
+        const activeFriend = renameFriend(state.activeFriend);
         state = normalizeState({ ...defaultState(), ...payload.new.data });
         state.activeFriend = activeFriend && state.friends.includes(activeFriend) ? activeFriend : "";
         localStorage.setItem(storageKey, JSON.stringify(sharedState()));
@@ -803,6 +806,10 @@ function subscribeCloudState() {
 
 function slug(value) {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function searchable(value) {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function eventId(dayId, event) {
@@ -826,17 +833,41 @@ function getEventScore(id) {
   return Object.values(state.votes[id] || {}).reduce((total, rating) => total + ratingMeta[rating].score, 0);
 }
 
+function allProgramEvents() {
+  return days.flatMap((day) => day.events.map((event) => ({ day, event, id: eventId(day.id, event) })));
+}
+
+function eventSearchText(day, event) {
+  const [origin, style] = eventInfo(event);
+  return searchable(`${event.name} ${displayStage(event.stage)} ${day.label} ${day.date} ${countryCode(origin)} ${style}`);
+}
+
+function eventSuggestionLabel(day, event) {
+  return `${event.name} - ${day.label} ${day.date}, ${event.start}, ${displayStage(event.stage)}`;
+}
+
+function findProgramMatches(query) {
+  const needle = searchable(query.trim());
+  if (!needle) return [];
+  return allProgramEvents()
+    .filter(({ day, event }) => eventSearchText(day, event).includes(needle))
+    .sort((a, b) => {
+      const exactA = searchable(a.event.name) === needle ? 0 : 1;
+      const exactB = searchable(b.event.name) === needle ? 0 : 1;
+      if (exactA !== exactB) return exactA - exactB;
+      return days.indexOf(a.day) - days.indexOf(b.day) || minutes(a.event.start) - minutes(b.event.start);
+    });
+}
+
 function getVisibleEvents() {
-  const query = els.searchInput.value.trim().toLowerCase();
   const stage = els.stageFilter.value;
   const onlyMine = els.onlyMine.checked;
 
   return getCurrentDay().events.filter((event) => {
     const id = eventId(activeDay, event);
-    const matchesQuery = !query || event.name.toLowerCase().includes(query);
     const matchesStage = stage === "all" || event.stage === stage;
     const matchesMine = !onlyMine || Boolean(state.votes[id]?.[state.activeFriend]);
-    return matchesQuery && matchesStage && matchesMine;
+    return matchesStage && matchesMine;
   });
 }
 
@@ -882,6 +913,18 @@ function renderStages() {
   els.stageFilter.value = stages.includes(current) ? current : "all";
 }
 
+function renderEventSuggestions() {
+  if (!els.eventSuggestions) return;
+  const query = els.searchInput.value.trim();
+  const matches = findProgramMatches(query).slice(0, 12);
+  els.eventSuggestions.innerHTML = "";
+  matches.forEach(({ day, event }) => {
+    const option = document.createElement("option");
+    option.value = eventSuggestionLabel(day, event);
+    els.eventSuggestions.append(option);
+  });
+}
+
 function renderTabs() {
   els.dayTabs.innerHTML = "";
   days.forEach((day) => {
@@ -892,6 +935,7 @@ function renderTabs() {
     button.addEventListener("click", () => {
       activeDay = day.id;
       activeEventId = null;
+      searchTargetId = null;
       render();
     });
     els.dayTabs.append(button);
@@ -946,7 +990,7 @@ function renderSchedule() {
     const column = visibleStages.indexOf(event.stage) + 1;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `event-card ${event.program ? "program-event" : ""} ${scoreClass(score)}`;
+    button.className = `event-card ${event.program ? "program-event" : ""} ${scoreClass(score)} ${id === searchTargetId ? "search-target" : ""}`;
     button.style.gridColumn = column;
     button.style.gridRow = `${startRow} / span ${span}`;
     button.dataset.id = id;
@@ -961,6 +1005,17 @@ function renderSchedule() {
     els.stageGrid.append(button);
   });
   updateMobileStageTrack();
+  scrollToSearchTarget();
+}
+
+function scrollToSearchTarget() {
+  if (!searchTargetId || activeView !== "program") return;
+  requestAnimationFrame(() => {
+    const target = els.stageGrid.querySelector(`[data-id="${searchTargetId}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    updateMobileStageTrack();
+  });
 }
 
 function updateMobileStageTrack() {
@@ -1654,6 +1709,33 @@ function renderView() {
   }
 }
 
+function navigateToProgramSearch() {
+  const query = els.searchInput.value.trim();
+  renderEventSuggestions();
+  if (!query) {
+    searchTargetId = null;
+    render();
+    return;
+  }
+
+  const matches = findProgramMatches(query);
+  const exact = matches.find(({ day, event }) => eventSuggestionLabel(day, event) === query);
+  const target = exact || (query.length >= 2 ? matches[0] : null);
+  if (!target) {
+    searchTargetId = null;
+    render();
+    return;
+  }
+
+  activeView = "program";
+  activeDay = target.day.id;
+  searchTargetId = target.id;
+  activeEventId = null;
+  els.stageFilter.value = "all";
+  closeEvent();
+  render();
+}
+
 function renderBackground() {
   renderFriends();
   renderView();
@@ -1662,6 +1744,7 @@ function renderBackground() {
 function render() {
   renderFriends();
   renderStages();
+  renderEventSuggestions();
   renderTabs();
   renderView();
 }
@@ -1701,7 +1784,12 @@ els.addFriendBtn.addEventListener("click", addFriend);
 els.addFriendPanelBtn.addEventListener("click", addFriend);
 
 els.stageFilter.addEventListener("change", render);
-els.searchInput.addEventListener("input", render);
+els.searchInput.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  renderEventSuggestions();
+  searchTimer = setTimeout(navigateToProgramSearch, 180);
+});
+els.searchInput.addEventListener("change", navigateToProgramSearch);
 els.onlyMine.addEventListener("change", render);
 els.schedule.addEventListener("scroll", updateMobileStageTrack, { passive: true });
 els.moduleButtons.forEach((button) => {
