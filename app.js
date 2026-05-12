@@ -9,6 +9,8 @@ const stages = [
   "Karaoke Stage"
 ];
 
+const defaultFriends = ["Binus", "Zuzka", "Martin", "Kateřina", "Kropy", "Štěpánka"];
+
 const brewerySites = {
   "Clock": "pivovarclock.cz",
   "Klenot": "",
@@ -674,7 +676,7 @@ function loadState() {
 
 function defaultState() {
   return {
-    friends: [],
+    friends: [...defaultFriends],
     activeFriend: "",
     votes: {},
     comments: {},
@@ -688,11 +690,11 @@ function normalizeState(loaded) {
   loaded.ratings = { beer: {}, food: {}, ...(loaded.ratings || {}) };
   loaded.foodReviews = loaded.foodReviews || {};
   loaded.customBeers = loaded.customBeers || {};
-  loaded.friends = loaded.friends || [];
+  const placeholders = new Set(["Bina", "Kamos 1", "Kamos 2"]);
+  const friends = (loaded.friends || []).filter((friend) => !placeholders.has(friend));
+  loaded.friends = [...new Set([...defaultFriends, ...friends])];
   loaded.votes = loaded.votes || {};
   loaded.comments = loaded.comments || {};
-  const placeholders = new Set(["Bina", "Kamos 1", "Kamos 2"]);
-  loaded.friends = loaded.friends.filter((friend) => !placeholders.has(friend));
   Object.values(loaded.votes).forEach((votes) => {
     placeholders.forEach((friend) => delete votes[friend]);
   });
